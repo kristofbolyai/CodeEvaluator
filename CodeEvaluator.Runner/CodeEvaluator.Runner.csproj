@@ -5,9 +5,15 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>dotnet-CodeRunner-240128AD-3CF6-4CA2-AC8D-6BF58D34E646</UserSecretsId>
+        <RootNamespace>CodeRunner</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Docker.DotNet" Version="3.125.15" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\CodeEvaluator.Data\CodeEvaluator.Data.csproj" />
     </ItemGroup>
 </Project>
