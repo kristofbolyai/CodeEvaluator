@@ -3,6 +3,7 @@ using System;
 using CodeEvaluator.Data.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,18 +11,25 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CodeEvaluator.Data.Migrations
 {
     [DbContext(typeof(CodeDataDbContext))]
-    partial class CodeDataDbContextModelSnapshot : ModelSnapshot
+    [Migration("20240325121812_AddCodeLanguage")]
+    partial class AddCodeLanguage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.3");
 
             modelBuilder.Entity("CodeEvaluator.Data.Models.CodeSubmission", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CodeFileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasComment("The name of the file containing the code to be executed. This file must be located in the specified code directory.");
 
                     b.Property<DateTime?>("FinishedAt")
                         .HasColumnType("TEXT")
@@ -42,6 +50,9 @@ namespace CodeEvaluator.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CodeFileName")
+                        .IsUnique();
 
                     b.ToTable("CodeSubmissions");
                 });

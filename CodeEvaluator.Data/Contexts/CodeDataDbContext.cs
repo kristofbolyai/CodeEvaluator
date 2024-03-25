@@ -7,7 +7,7 @@ public class CodeDataDbContext : DbContext
 {
     private static readonly string SqliteDatabasePath = Path.Join(Paths.ApplicationDataPath, "CodeEvaluator");
     private static readonly string SqliteConnectionString = $"Data Source={SqliteDatabasePath}/code_data.db";
-    
+
     public DbSet<CodeSubmission> CodeSubmissions { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

@@ -1,8 +1,16 @@
-using Docker.DotNet;
+using CodeEvaluator.Data.Contexts;
+using CodeEvaluator.Data.Models;
+using CodeEvaluator.Runner.Handlers;
+using CodeEvaluator.Runner.Models;
+using Microsoft.EntityFrameworkCore;
 
-namespace CodeRunner.Services;
+namespace CodeEvaluator.Runner.Services;
 
-public class CodeQueueProcessingService(ILogger<CodeQueueProcessingService> logger) : IHostedLifecycleService
+public class CodeQueueProcessingService(
+    ILogger<CodeQueueProcessingService> logger,
+    CodeQueueHandler queueHandler,
+    IDbContextFactory<CodeDataDbContext> dbContextFactory,
+    ContainerHandler containerHandler) : IHostedLifecycleService
 {
     /// <summary>
     /// The number of seconds between checking the queue for new items
@@ -10,7 +18,7 @@ public class CodeQueueProcessingService(ILogger<CodeQueueProcessingService> logg
     /// the new item is dequeued and the container is started
     /// </summary>
     private const int SecondsBetweenQueueChecks = 5;
-    
+
     /// <summary>
     /// The max number of containers that can be run concurrently
     /// is the number of processors available to the application minus two reserved for the host
@@ -21,31 +29,24 @@ public class CodeQueueProcessingService(ILogger<CodeQueueProcessingService> logg
     /// The token source used to stop the service when requested
     /// </summary>
     private readonly CancellationTokenSource _stopTokenSource = new();
-    
+
     /// <summary>
     /// The timer used to check the queue for new items to process
     /// </summary>
     private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(SecondsBetweenQueueChecks));
-    
+
     /// <summary>
     /// The running containers that are currently processing code submissions
     /// </summary>
-    private Task[] _runningContainers = new Task[MaxConcurrentContainers];
-    
-    public async Task StartAsync(CancellationToken cancellationToken)
+    private readonly CodeExecutionTask[] _runningContainers =
+        Enumerable.Repeat(CodeExecutionTask.Empty, MaxConcurrentContainers).ToArray();
+
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        Task executeQueueLoopAsync = ExecuteQueueLoopAsync();
-        
-        await executeQueueLoopAsync;
-        
-        // Log the exception if the task was faulted
-        if (executeQueueLoopAsync.IsFaulted)
-        {
-            logger.LogError(executeQueueLoopAsync.Exception, "An error occurred while processing the queue");
-        }
-        
-        // Wait for all running containers to finish
-        // TODO: Is this the correct way to wait for all running containers to finish?
+        // Start running the queue.
+        Task.Run(ExecuteQueueLoopAsync, cancellationToken);
+
+        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
@@ -53,9 +54,10 @@ public class CodeQueueProcessingService(ILogger<CodeQueueProcessingService> logg
         return _stopTokenSource.CancelAsync();
     }
 
-    public Task StartingAsync(CancellationToken cancellationToken)
+    public async Task StartingAsync(CancellationToken cancellationToken)
     {
-        return Task.CompletedTask;
+        // Create the default images for the supported languages
+        await containerHandler.CreateDefaultImages(cancellationToken);
     }
 
     public Task StartedAsync(CancellationToken cancellationToken)
@@ -72,7 +74,7 @@ public class CodeQueueProcessingService(ILogger<CodeQueueProcessingService> logg
     {
         return Task.CompletedTask;
     }
-    
+
     private async Task ExecuteQueueLoopAsync()
     {
         while (!_stopTokenSource.IsCancellationRequested)
@@ -83,10 +85,52 @@ public class CodeQueueProcessingService(ILogger<CodeQueueProcessingService> logg
             }
         }
     }
-    
+
     private async Task ProcessQueueAsync()
     {
-        // TODO
-        logger.LogInformation("Processing queue at {Time}", DateTime.UtcNow);
+        await using CodeDataDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
+
+        // Get the number of free containers
+        int freeContainers = _runningContainers.Count(container => container.IsCompleted);
+
+        // Get the next code submissions from the queue
+        CodeSubmission[] queuedSubmissions = await queueHandler.PopSubmissionsFromQueue(dbContext, freeContainers);
+
+        int containerIndex = 0;
+        int submissionIndex = 0;
+        
+        // Fill the completed containers with new code submissions
+        while (containerIndex < freeContainers && submissionIndex < queuedSubmissions.Length)
+        {
+            // Skip the container if it is not completed
+            if (!_runningContainers[containerIndex].IsCompleted)
+            {
+                containerIndex++;
+                continue;
+            }
+
+            // Get the next submission
+            CodeSubmission nextSubmission = queuedSubmissions[submissionIndex];
+
+            // Mark the submission as running
+            nextSubmission.Status = CodeSubmission.CodeSubmissionStatus.Running;
+            nextSubmission.StartedAt = DateTime.UtcNow;
+
+            // Start the container with the code submission
+            Task executionTask = containerHandler.StartExecutionAsync(nextSubmission, _stopTokenSource.Token);
+
+            // Add the task to the running containers
+            _runningContainers[containerIndex] = new CodeExecutionTask(executionTask, nextSubmission);
+
+            // Log the start of the code execution
+            logger.LogInformation("Started code execution for submission {SubmissionId} in container {ContainerIndex}",
+                nextSubmission.Id, containerIndex);
+
+            containerIndex++;
+            submissionIndex++;
+        }
+
+        // Save the state of the code submissions
+        await dbContext.SaveChangesAsync();
     }
 }
