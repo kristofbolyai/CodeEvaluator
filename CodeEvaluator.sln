@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeEvaluator.Runner", "Cod
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeEvaluator.Data", "CodeEvaluator.Data\CodeEvaluator.Data.csproj", "{A42E2FCF-1797-4C75-9695-AC89E0AE93BC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeEvaluator.Web", "CodeEvaluator.Web\CodeEvaluator.Web.csproj", "{541A6954-D9A6-494D-A31B-5EC5BA100984}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{A42E2FCF-1797-4C75-9695-AC89E0AE93BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A42E2FCF-1797-4C75-9695-AC89E0AE93BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A42E2FCF-1797-4C75-9695-AC89E0AE93BC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{541A6954-D9A6-494D-A31B-5EC5BA100984}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{541A6954-D9A6-494D-A31B-5EC5BA100984}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{541A6954-D9A6-494D-A31B-5EC5BA100984}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{541A6954-D9A6-494D-A31B-5EC5BA100984}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
