@@ -9,7 +9,7 @@ namespace CodeEvaluator.Runner.Handlers;
 /// </summary>
 /// <param name="logger">A logger instance for logging messages.</param>
 /// <param name="client">A Docker client for interacting with the Docker API.</param>
-public class ContainerHandler(ILogger<ContainerHandler> logger, DockerClient client)
+public class ContainerHandler(ILogger<ContainerHandler> logger, DockerClient client, CodeExecutionHandler codeExecutionHandler)
 {
     private const int ContainerExecutionTimeoutSeconds = 60;
 
@@ -121,11 +121,19 @@ public class ContainerHandler(ILogger<ContainerHandler> logger, DockerClient cli
     {
         if (_defaultImages.TryGetValue(codeSubmission.Language, out string? imageTag))
         {
+            // Set up the container folder for the code submission
+            string runDirectory = codeExecutionHandler.SetupContainerFolderForSubmission(codeSubmission);
+            
+            logger.LogInformation(
+                "Using directory {Directory} for the code submission {CodeSubmission} with container image {ImageTag}",
+                runDirectory, codeSubmission.Id, imageTag);
+
             // TODO: Add cmd to execute the code
             return await client.Containers.CreateContainerAsync(new CreateContainerParameters
             {
+                Image = imageTag,
                 Cmd = ["sleep", "15"],
-                Image = imageTag
+                WorkingDir = runDirectory
             }, cancellationToken);
         }
 

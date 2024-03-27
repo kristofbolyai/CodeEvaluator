@@ -7,19 +7,15 @@ namespace CodeEvaluator.Web.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class CodeSubmissionController(CodeDataDbContext codeDataDbContext, CodeExecutionHandler executionHandler)
+public class CodeSubmissionController(CodeDataDbContext codeDataDbContext, CodeQueueHandler queueHandler)
     : ControllerBase
 {
     // POST: api/CodeSubmission/Submit
     [HttpPost("Submit")]
     public async Task<IActionResult> SubmitCode(CodeLanguage codeLanguage, [FromForm] IFormFile file)
     {
-        CodeSubmission codeSubmission = await executionHandler.SetupContainerFolder(file.OpenReadStream(), codeLanguage);
-
-        // Add the code submission to the database
-        codeDataDbContext.CodeSubmissions.Add(codeSubmission);
-        await codeDataDbContext.SaveChangesAsync();
-
+        // Save the code to disk, add it to the database, and return the code submission
+        CodeSubmission codeSubmission = await queueHandler.SaveCodeToDisk(codeDataDbContext, file.OpenReadStream(), codeLanguage);
         return Ok(codeSubmission);
     }
 }

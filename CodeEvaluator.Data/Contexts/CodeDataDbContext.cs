@@ -5,10 +5,10 @@ namespace CodeEvaluator.Data.Contexts;
 
 public class CodeDataDbContext : DbContext
 {
-    private static readonly string SqliteDatabasePath = Path.Join(Paths.ApplicationDataPath, "CodeEvaluator");
+    private static readonly string SqliteDatabasePath = Path.Join(Paths.ApplicationDataPath, "database");
     private static readonly string SqliteConnectionString = $"Data Source={SqliteDatabasePath}/code_data.db";
 
-    public DbSet<CodeSubmission> CodeSubmissions { get; set; }
+    public DbSet<CodeSubmission> CodeSubmissions { get; init; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
