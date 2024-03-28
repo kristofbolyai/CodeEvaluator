@@ -9,6 +9,7 @@ namespace CodeEvaluator.Runner.Handlers;
 /// </summary>
 /// <param name="logger">A logger instance for logging messages.</param>
 /// <param name="client">A Docker client for interacting with the Docker API.</param>
+/// <param name="codeExecutionHandler">A code execution handler for setting up the container folder.</param>
 public class ContainerHandler(ILogger<ContainerHandler> logger, DockerClient client, CodeExecutionHandler codeExecutionHandler)
 {
     private const int ContainerExecutionTimeoutSeconds = 60;
@@ -39,10 +40,10 @@ public class ContainerHandler(ILogger<ContainerHandler> logger, DockerClient cli
     }
 
     /// <summary>
-    /// 
+    ///  Starts the execution of the code submission in a new container.
     /// </summary>
-    /// <param name="codeSubmission"></param>
-    /// <param name="cancellationToken"></param>
+    /// <param name="codeSubmission">The code submission to execute.</param>
+    /// <param name="cancellationToken">The cancellation token for the execution process.</param>
     /// <returns></returns>
     public async Task StartExecutionAsync(CodeSubmission codeSubmission, CancellationToken cancellationToken)
     {
