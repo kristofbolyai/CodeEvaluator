@@ -1,5 +1,6 @@
 using CodeEvaluator.Data;
 using CodeEvaluator.Data.Models;
+using CodeEvaluator.Runner.Models;
 
 namespace CodeEvaluator.Runner.Handlers;
 
@@ -35,10 +36,18 @@ public class CodeExecutionHandler(ILogger<CodeExecutionHandler> logger)
         string containerCodeFilePath = Path.Join(runDirectory, "code");
         
         // Copy the code file to the container folder
-        File.Copy(oldCodeFilePath, containerCodeFilePath);
+        File.Copy(oldCodeFilePath, containerCodeFilePath, true);
         
         logger.LogInformation("Copied the code file to the container folder '{Directory}' for the code submission {CodeSubmission}",runDirectory,  codeSubmission.Id);
 
         return runDirectory;
+    }
+
+    public async Task RunCodeSubmission(CodeSubmission codeSubmission, RunningContainerInstance containerInstance)
+    {
+        // byte[] commandBuffer = "echo 'Hello, World!' > output.txt"u8.ToArray();
+        // await containerInstance.ShellStream.WriteAsync(commandBuffer, 0, commandBuffer.Length, CancellationToken.None);
+        //
+        // containerInstance.ShellStream.CloseWrite();
     }
 }

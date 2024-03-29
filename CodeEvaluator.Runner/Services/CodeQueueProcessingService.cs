@@ -10,7 +10,8 @@ public class CodeQueueProcessingService(
     ILogger<CodeQueueProcessingService> logger,
     CodeQueueHandler queueHandler,
     IDbContextFactory<CodeDataDbContext> dbContextFactory,
-    ContainerHandler containerHandler) : IHostedLifecycleService
+    ContainerHandler containerHandler,
+    CodeExecutionHandler codeExecutionHandler) : IHostedLifecycleService
 {
     /// <summary>
     /// The number of seconds between checking the queue for new items
@@ -38,8 +39,7 @@ public class CodeQueueProcessingService(
     /// <summary>
     /// The running containers that are currently processing code submissions
     /// </summary>
-    private readonly CodeExecutionTask[] _runningContainers =
-        Enumerable.Repeat(CodeExecutionTask.Empty, MaxConcurrentContainers).ToArray();
+    private readonly Dictionary<CodeSubmission, RunningContainerInstance> _runningContainers = new();
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -58,6 +58,9 @@ public class CodeQueueProcessingService(
     {
         // Create the default images for the supported languages
         await containerHandler.CreateDefaultImages(cancellationToken);
+
+        // Start the container check loop
+        _ = Task.Run(() => containerHandler.ExecuteContainerMonitorLoopAsync(_stopTokenSource.Token), cancellationToken);
     }
 
     public Task StartedAsync(CancellationToken cancellationToken)
@@ -81,56 +84,107 @@ public class CodeQueueProcessingService(
         {
             while (await _timer.WaitForNextTickAsync(_stopTokenSource.Token))
             {
-                await ProcessQueueAsync();
+                try
+                {
+                    await ProcessQueueAsync();
+                }
+                catch (Exception e)
+                {
+                    logger.LogError(e, "An error occurred while processing the code queue");
+                }
             }
         }
     }
 
     private async Task ProcessQueueAsync()
     {
+        // Cleanup the running containers
+        CleanupRunningContainersAsync();
+        
         await using CodeDataDbContext dbContext = await dbContextFactory.CreateDbContextAsync();
 
         // Get the number of free containers
-        int freeContainers = _runningContainers.Count(container => container.IsCompleted);
+        int freeContainers = MaxConcurrentContainers - _runningContainers.Count;
 
         // Get the next code submissions from the queue
         CodeSubmission[] queuedSubmissions = await queueHandler.PopSubmissionsFromQueue(dbContext, freeContainers);
 
-        int containerIndex = 0;
+        int containerCount = 0;
         int submissionIndex = 0;
         
         // Fill the completed containers with new code submissions
-        while (containerIndex < freeContainers && submissionIndex < queuedSubmissions.Length)
+        while (containerCount < freeContainers && submissionIndex < queuedSubmissions.Length)
         {
-            // Skip the container if it is not completed
-            if (!_runningContainers[containerIndex].IsCompleted)
-            {
-                containerIndex++;
-                continue;
-            }
-
             // Get the next submission
             CodeSubmission nextSubmission = queuedSubmissions[submissionIndex];
 
-            // Mark the submission as running
-            nextSubmission.Status = CodeSubmission.CodeSubmissionStatus.Running;
-            nextSubmission.StartedAt = DateTime.UtcNow;
+            if (!await SetupExecutionForSubmission(nextSubmission))
+            {
+                // Setup failed, go to the next submission
+                // Try running the next submission
+                submissionIndex++;
+                continue;
+            }
 
-            // Start the container with the code submission
-            Task executionTask = containerHandler.StartExecutionAsync(nextSubmission, _stopTokenSource.Token);
-
-            // Add the task to the running containers
-            _runningContainers[containerIndex] = new CodeExecutionTask(executionTask, nextSubmission);
-
-            // Log the start of the code execution
-            logger.LogInformation("Started code execution for submission {SubmissionId} in container {ContainerIndex}",
-                nextSubmission.Id, containerIndex);
-
-            containerIndex++;
+            containerCount++;
             submissionIndex++;
         }
 
         // Save the state of the code submissions
         await dbContext.SaveChangesAsync();
+    }
+
+    private async Task<bool> SetupExecutionForSubmission(CodeSubmission nextSubmission)
+    {
+        // Set up the container folder for the code submission
+        string runDirectoryForContainer;
+        try
+        {
+            runDirectoryForContainer = codeExecutionHandler.SetupContainerFolderForSubmission(nextSubmission);
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Failed to set up the container folder for the code submission {CodeSubmission}",
+                nextSubmission.Id);
+            return false;
+        }
+
+        // Start the container with the code submission
+        RunningContainerInstance? containerInstance =
+            await containerHandler.StartExecutionAsync(nextSubmission.Language, runDirectoryForContainer, _stopTokenSource.Token);
+
+        // If the container is null, continue to the next submission
+        if (containerInstance is null)
+        {
+            // Try running the next submission
+            return false;
+        }
+
+        // Add the container to the running containers
+        _runningContainers.Add(nextSubmission, containerInstance);
+
+        // Mark the submission as running
+        nextSubmission.Status = CodeSubmission.CodeSubmissionStatus.Running;
+        nextSubmission.StartedAt = DateTime.UtcNow;
+
+        // Log the start of the code execution
+        logger.LogInformation("Started code execution for submission {SubmissionId} in container {ContainerId}",
+            nextSubmission.Id, containerInstance.ContainerId);
+
+        // Send the container commands to run the code submission
+        await codeExecutionHandler.RunCodeSubmission(nextSubmission, containerInstance);
+
+        return true;
+    }
+
+    private void CleanupRunningContainersAsync()
+    {
+        foreach (KeyValuePair<CodeSubmission, RunningContainerInstance> runningContainer in _runningContainers)
+        {
+            if (containerHandler.IsContainerRunning(runningContainer.Value)) continue;
+
+            // Remove the container from the running containers
+            _runningContainers.Remove(runningContainer.Key);
+        }
     }
 }
